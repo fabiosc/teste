@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player de Vídeo HLS</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        #video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .url-input {
+            width: 70%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        
+        .load-btn {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .load-btn:hover {
+            background-color: #0056b3;
+        }
+        
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .quality-selector {
+            margin-top: 10px;
+        }
+        
+        .quality-selector select {
+            padding: 5px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .error {
+            color: #dc3545;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            display: none;
+        }
+        
+        .example-urls {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+        }
+        
+        .example-urls h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        
+        .example-url {
+            display: block;
+            color: #007bff;
+            text-decoration: none;
+            margin: 5px 0;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        .example-url:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Player de Vídeo HLS</h1>
+        
+        <div class="video-container">
+            <video 
+                id="video" 
+                controls 
+                muted
+                poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='450'%3E%3Crect width='100%25' height='100%25' fill='%23000'/%3E%3Ctext x='50%25' y='50%25' fill='%23fff' text-anchor='middle' dy='.3em' font-family='Arial' font-size='24'%3ECarregue um vídeo HLS%3C/text%3E%3C/svg%3E">
+                Seu navegador não suporta o elemento de vídeo.
+            </video>
+        </div>
+        
+        <div class="controls">
+            <input 
+                type="url" 
+                id="urlInput" 
+                class="url-input" 
+                placeholder="Cole aqui a URL do stream HLS (.m3u8)"
+                value="https://video01.logicahost.com.br/tvfeliz/tvfeliz/chunklist_w1894611956.m3u8">
+            <button onclick="loadVideo()" class="load-btn">Carregar Vídeo</button>
+            
+            <div class="quality-selector">
+                <label for="qualitySelect">Qualidade: </label>
+                <select id="qualitySelect" onchange="changeQuality()">
+                    <option value="-1">Auto</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="error" id="errorMessage"></div>
+        
+        <div class="info" id="videoInfo" style="display: none;">
+            <h3>Informações do Vídeo:</h3>
+            <div id="infoContent"></div>
+        </div>
+        
+        <div class="example-urls">
+            <h3>URLs de Exemplo:</h3>
+            <p>Clique em uma das URLs abaixo para testar:</p>
+            <a href="#" class="example-url" onclick="loadExampleVideo('https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8')">
+                Tears of Steel - Demo Stream
+            </a>
+            <a href="#" class="example-url" onclick="loadExampleVideo('https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8')">
+                Sintel - Bitdash Demo
+            </a>
+            <a href="#" class="example-url" onclick="loadExampleVideo('https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8')">
+                Live Test Stream
+            </a>
+        </div>
+    </div>
+
+    <!-- HLS.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    
+    <script>
+        let hls;
+        const video = document.getElementById('video');
+        const urlInput = document.getElementById('urlInput');
+        const errorMessage = document.getElementById('errorMessage');
+        const videoInfo = document.getElementById('videoInfo');
+        const infoContent = document.getElementById('infoContent');
+        const qualitySelect = document.getElementById('qualitySelect');
+
+        // Verifica se o HLS.js é suportado
+        function isHLSSupported() {
+            return Hls.isSupported();
+        }
+
+        // Verifica se o navegador suporta HLS nativamente
+        function isNativeHLSSupported() {
+            return video.canPlayType('application/vnd.apple.mpegurl');
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+
+        function hideError() {
+            errorMessage.style.display = 'none';
+        }
+
+        function updateVideoInfo() {
+            if (hls) {
+                const levels = hls.levels;
+                let info = `<p><strong>Levels disponíveis:</strong> ${levels.length}</p>`;
+                
+                levels.forEach((level, index) => {
+                    info += `<p>Level ${index}: ${level.width}x${level.height} @ ${Math.round(level.bitrate/1000)}kbps</p>`;
+                });
+                
+                info += `<p><strong>Level atual:</strong> ${hls.currentLevel === -1 ? 'Auto' : hls.currentLevel}</p>`;
+                info += `<p><strong>URL:</strong> ${hls.url}</p>`;
+                
+                infoContent.innerHTML = info;
+                videoInfo.style.display = 'block';
+            }
+        }
+
+        function updateQualitySelector() {
+            if (hls) {
+                // Limpa opções anteriores exceto "Auto"
+                qualitySelect.innerHTML = '<option value="-1">Auto</option>';
+                
+                // Adiciona opções para cada level
+                hls.levels.forEach((level, index) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = `${level.height}p (${Math.round(level.bitrate/1000)}kbps)`;
+                    qualitySelect.appendChild(option);
+                });
+                
+                // Define o valor atual
+                qualitySelect.value = hls.currentLevel;
+            }
+        }
+
+        function changeQuality() {
+            if (hls) {
+                const selectedLevel = parseInt(qualitySelect.value);
+                hls.currentLevel = selectedLevel;
+                updateVideoInfo();
+            }
+        }
+
+        function loadVideo() {
+            const url = urlInput.value.trim();
+            
+            if (!url) {
+                showError('Por favor, insira uma URL válida');
+                return;
+            }
+
+            hideError();
+            videoInfo.style.display = 'none';
+
+            // Destrói instância anterior se existir
+            if (hls) {
+                hls.destroy();
+            }
+
+            if (isHLSSupported()) {
+                // Usa HLS.js
+                hls = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                });
+
+                // Event listeners
+                hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                    console.log('Manifest carregado, iniciando reprodução');
+                    updateVideoInfo();
+                    updateQualitySelector();
+                });
+
+                hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
+                    console.log('Level trocado para: ' + data.level);
+                    updateVideoInfo();
+                    qualitySelect.value = hls.currentLevel;
+                });
+
+                hls.on(Hls.Events.ERROR, function (event, data) {
+                    console.error('Erro HLS:', data);
+                    
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                showError('Erro de rede: Não foi possível carregar o vídeo');
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                showError('Erro de mídia: Problema com o formato do vídeo');
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                showError('Erro fatal: Não foi possível reproduzir o vídeo');
+                                hls.destroy();
+                                break;
+                        }
+                    }
+                });
+
+                // Carrega a URL
+                hls.loadSource(url);
+                hls.attachMedia(video);
+
+            } else if (isNativeHLSSupported()) {
+                // Usa suporte nativo do navegador (Safari)
+                video.src = url;
+                video.addEventListener('loadedmetadata', function() {
+                    console.log('Vídeo carregado com suporte nativo HLS');
+                });
+                
+                video.addEventListener('error', function() {
+                    showError('Erro ao carregar o vídeo');
+                });
+
+            } else {
+                showError('Seu navegador não suporta reprodução HLS');
+            }
+        }
+
+        function loadExampleVideo(url) {
+            urlInput.value = url;
+            loadVideo();
+        }
+
+        // Event listeners
+        urlInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                loadVideo();
+            }
+        });
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!isHLSSupported() && !isNativeHLSSupported()) {
+                showError('Seu navegador não suporta reprodução HLS. Recomendamos usar Chrome, Firefox ou Safari.');
+            }
+        });
+    </script>
+</body>
+</html>
